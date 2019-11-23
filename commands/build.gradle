@@ -1,0 +1,29 @@
+plugins {
+    id 'scala'
+}
+
+dependencies {
+	implementation project(":request-client")
+
+    implementation libs.jacksonCore
+    implementation libs.jacksonDatabind
+    implementation libs.jacksonDataformatYaml
+    implementation libs.joptSimple
+    implementation libs.log4j
+    implementation libs.scala
+    implementation libs.scalaLogging	
+    implementation libs.slf4jApi
+    implementation libs.slf4jlog4j
+    
+    testImplementation libs.junit
+    testImplementation libs.hamcrest
+}
+
+javadoc {
+    enabled = true
+}
+
+sourceSets.main.scala.srcDir "src/main/java"
+sourceSets.main.java.srcDirs = []
+sourceSets.test.scala.srcDir "src/test/java"
+sourceSets.test.java.srcDirs = []
