@@ -2,9 +2,7 @@ package net.uweeisele.kafka.protocol.client.node;
 
 import org.apache.kafka.common.Node;
 
-import java.util.function.Supplier;
-
-public class ControllerNodeProvider implements Supplier<Node> {
+public class ControllerNodeProvider implements NodeProvider {
 
     private final ClusterMetadata clusterMetadata;
 
@@ -13,7 +11,7 @@ public class ControllerNodeProvider implements Supplier<Node> {
     }
 
     @Override
-    public Node get() {
+    public Node provide() {
         if (clusterMetadata.isReady() && clusterMetadata.controller() != null) {
             return clusterMetadata.controller();
         }

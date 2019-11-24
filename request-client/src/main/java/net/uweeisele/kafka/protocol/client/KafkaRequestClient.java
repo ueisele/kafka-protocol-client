@@ -1,11 +1,13 @@
 package net.uweeisele.kafka.protocol.client;
 
 
-import org.apache.commons.lang3.tuple.ImmutablePair;
+import net.uweeisele.kafka.protocol.client.node.NodeProvider;
 import org.apache.kafka.clients.*;
-import org.apache.kafka.common.*;
+import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.Metric;
+import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.Node;
 import org.apache.kafka.common.errors.*;
-import org.apache.kafka.common.internals.KafkaFutureImpl;
 import org.apache.kafka.common.metrics.*;
 import org.apache.kafka.common.network.ChannelBuilder;
 import org.apache.kafka.common.network.Selector;
@@ -25,11 +27,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableMap;
-import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.common.utils.Utils.closeQuietly;
 
 public class KafkaRequestClient implements AutoCloseable {
@@ -274,70 +274,57 @@ public class KafkaRequestClient implements AutoCloseable {
         thread.start();
     }
 
-    public <T extends AbstractResponse> List<KafkaFuture<ImmutablePair<Node, T>>> request(RequestResponseDefinition<T> requestResponseDefinition, List<? extends Supplier<Node>> nodeProviders) {
-        return request(requestResponseDefinition, nodeProviders, null);
+    public <T, V extends NamedRequestBuilder & ResultResponseHandler<T> & NodeProvider> T request(V requestBuilderResponseHandlerNodeProvider) {
+        return request(requestBuilderResponseHandlerNodeProvider, requestBuilderResponseHandlerNodeProvider, requestBuilderResponseHandlerNodeProvider);
     }
 
-    public <T extends AbstractResponse> List<KafkaFuture<ImmutablePair<Node, T>>> request(AbstractRequest.Builder<?> requestBuilder, Class<T> responseType, List<? extends Supplier<Node>> nodeProviders) {
-        return request(requestBuilder, responseType, nodeProviders, null);
+    public <T, V extends NamedRequestBuilder & ResultResponseHandler<T>> T request(V requestBuilderResponseHandler, NodeProvider nodeProvider) {
+        return request(requestBuilderResponseHandler, nodeProvider, requestBuilderResponseHandler);
     }
 
-    public <T extends AbstractResponse> List<KafkaFuture<ImmutablePair<Node, T>>> request(RequestResponseDefinition<T> requestResponseDefinition, List<? extends Supplier<Node>> nodeProviders, Integer timeoutMs) {
-        return request(requestResponseDefinition.requestBuilder(), requestResponseDefinition.responseType(), nodeProviders, timeoutMs);
+    public <T> T request(NamedRequestBuilder requestBuilder, NodeProvider nodeProvider, ResultResponseHandler<T> responseHandler) {
+        return request(requestBuilder.requestName(), requestBuilder, nodeProvider, responseHandler, requestBuilder.timeout());
     }
 
-    public <T extends AbstractResponse> List<KafkaFuture<ImmutablePair<Node, T>>> request(AbstractRequest.Builder<?> requestBuilder, Class<T> responseType, List<? extends Supplier<Node>> nodeProviders, Integer timeoutMs) {
-        return nodeProviders.stream()
-                .map(provider -> request(requestBuilder, responseType, provider, timeoutMs))
-                .collect(toList());
+    public <T> T request(AbstractRequest.Builder<?> requestBuilder, NodeProvider nodeProvider, ResultResponseHandler<T> responseHandler) {
+        return request(requestBuilder, nodeProvider, responseHandler, null);
     }
 
-    public <T extends AbstractResponse> KafkaFuture<ImmutablePair<Node, T>> request(AbstractRequest.Builder<?> requestBuilder, Class<T> responseType, Supplier<Node> nodeProvider) {
-        return request(requestBuilder, responseType, nodeProvider, null);
+    public <T> T request(AbstractRequest.Builder<?> requestBuilder, NodeProvider nodeProvider, ResultResponseHandler<T> responseHandler, Integer timeoutMs) {
+        return request(requestBuilder.apiKey().name, (t) -> requestBuilder, nodeProvider, responseHandler, timeoutMs);
     }
 
-    public <T extends AbstractResponse> KafkaFuture<ImmutablePair<Node, T>> request(RequestResponseDefinition<T> requestResponseDefinition, Supplier<Node> nodeProvider) {
-        return request(requestResponseDefinition, nodeProvider, null);
+    public <T> T request(String requestName, RequestBuilder requestBuilder, NodeProvider nodeProvider, ResultResponseHandler<T> responseHandler) {
+        return request(requestName, requestBuilder, nodeProvider, responseHandler, null);
     }
 
-    public <T extends AbstractResponse> KafkaFuture<ImmutablePair<Node, T>> request(RequestResponseDefinition<T> requestResponseDefinition, Supplier<Node> nodeProvider, Integer timeoutMs) {
-        return request(requestResponseDefinition.requestBuilder(), requestResponseDefinition.responseType(), nodeProvider, timeoutMs);
+    public <T> T request(String requestName, RequestBuilder requestBuilder, NodeProvider nodeProvider, ResultResponseHandler<T> responseHandler, Integer timeoutMs) {
+        send(requestName, requestBuilder, nodeProvider, responseHandler, timeoutMs);
+        return responseHandler.get();
     }
 
-    public <T extends AbstractResponse> KafkaFuture<ImmutablePair<Node, T>> request(AbstractRequest.Builder<?> requestBuilder, Class<T> responseType, Supplier<Node> nodeProvider, Integer timeoutMs) {
-        final KafkaFutureImpl<ImmutablePair<Node, T>> responseFuture = new KafkaFutureImpl<>();
-        send(requestBuilder, nodeProvider, new ResponseHandler() {
-            @Override
-            public void handleResponse(AbstractResponse abstractResponse, Node node) {
-                responseFuture.complete(ImmutablePair.of(node, responseType.cast(abstractResponse)));
-            }
-
-            @Override
-            public void handleFailure(Throwable throwable, Node node) {
-                responseFuture.completeExceptionally(throwable);
-            }
-        }, timeoutMs);
-        return responseFuture;
+    public void send(NamedRequestBuilder requestBuilder, NodeProvider nodeProvider, ResponseHandler responseHandler) {
+        send(requestBuilder.requestName(), requestBuilder, nodeProvider, responseHandler, requestBuilder.timeout());
     }
 
-    public void send(AbstractRequest.Builder<?> requestBuilder, List<? extends Map.Entry<? extends Supplier<Node>, ? extends ResponseHandler>> nodeProviderAndResponseHandlerPairs) {
-        send(requestBuilder, nodeProviderAndResponseHandlerPairs, null);
-    }
-
-    public void send(AbstractRequest.Builder<?> requestBuilder, List<? extends Map.Entry<? extends Supplier<Node>, ? extends ResponseHandler>> nodeProviderAndResponseHandlerPairs, Integer timeoutMs) {
-        nodeProviderAndResponseHandlerPairs.forEach(pair -> send(requestBuilder, pair.getKey(), pair.getValue(), timeoutMs));
-    }
-
-    public void send(AbstractRequest.Builder<?> requestBuilder, Supplier<Node> nodeProvider, ResponseHandler responseHandler) {
+    public void send(AbstractRequest.Builder<?> requestBuilder, NodeProvider nodeProvider, ResponseHandler responseHandler) {
         send(requestBuilder, nodeProvider, responseHandler, null);
     }
 
-    public void send(AbstractRequest.Builder<?> requestBuilder, Supplier<Node> nodeProvider, ResponseHandler responseHandler, Integer timeoutMs) {
+    public void send(AbstractRequest.Builder<?> requestBuilder, NodeProvider nodeProvider, ResponseHandler responseHandler, Integer timeoutMs) {
+        send(requestBuilder.apiKey().name, (t) -> requestBuilder, nodeProvider, responseHandler, timeoutMs);
+    }
+
+    public void send(String requestName, RequestBuilder requestBuilder, NodeProvider nodeProvider, ResponseHandler responseHandler) {
+        send(requestName, requestBuilder, nodeProvider, responseHandler, null);
+    }
+
+    public void send(String requestName, RequestBuilder requestBuilder, NodeProvider nodeProvider, ResponseHandler responseHandler, Integer timeoutMs) {
         final long now = time.milliseconds();
-        runnable.call(new Call(requestBuilder.apiKey().name, calcDeadlineMs(now, timeoutMs), nodeProvider) {
+        runnable.call(new Call(requestName, calcDeadlineMs(now, timeoutMs), nodeProvider) {
             @Override
             AbstractRequest.Builder<?> createRequest(int timeoutMs) {
-                return requestBuilder;
+                return requestBuilder.requestBuilder(timeoutMs);
             }
 
             @Override
@@ -348,6 +335,11 @@ public class KafkaRequestClient implements AutoCloseable {
             @Override
             void handleFailure(Throwable throwable) {
                 responseHandler.handleFailure(throwable, curNode());
+            }
+
+            @Override
+            boolean handleUnsupportedVersionException(UnsupportedVersionException exception) {
+                return requestBuilder.handleUnsupportedVersionException(exception);
             }
         }, now);
     }
@@ -429,13 +421,13 @@ public class KafkaRequestClient implements AutoCloseable {
     abstract class Call {
         private final String callName;
         private final long deadlineMs;
-        private final Supplier<Node> nodeProvider;
+        private final NodeProvider nodeProvider;
         private int tries = 0;
         private boolean aborted = false;
         private Node curNode = null;
         private long nextAllowedTryMs = 0;
 
-        Call(String callName, long deadlineMs, Supplier<Node> nodeProvider) {
+        Call(String callName, long deadlineMs, NodeProvider nodeProvider) {
             this.callName = callName;
             this.deadlineMs = deadlineMs;
             this.nodeProvider = nodeProvider;
@@ -733,7 +725,7 @@ public class KafkaRequestClient implements AutoCloseable {
          */
         private boolean maybeDrainPendingCall(Call call, long now) {
             try {
-                Node node = call.nodeProvider.get();
+                Node node = call.nodeProvider.provide();
                 if (node != null) {
                     log.trace("Assigned {} to node {}", call, node);
                     call.curNode = node;

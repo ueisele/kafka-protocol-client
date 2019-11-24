@@ -2,7 +2,6 @@ package net.uweeisele.kafka.protocol.client;
 
 import net.uweeisele.kafka.protocol.client.node.*;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.requests.MetadataRequest;
@@ -10,21 +9,20 @@ import org.apache.kafka.common.requests.MetadataResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
 
 class ClusterTest {
 
     @Test
     void fixedCluster() throws InterruptedException, ExecutionException, TimeoutException {
         try(KafkaRequestClient requestClient = KafkaRequestClient.create()) {
-
             ClusterMetadata clusterMetadata = new FixedClusterMetadata(new ClusterBuilder().addNodes(new Node(-1, "localhost", 9092)).get());
-            Supplier<Node> nodeProvider = new ConstantNodeProvider(clusterMetadata, -1);
+            NodeProvider nodeProvider = new ConstantNodeProvider(clusterMetadata, -1);
 
-            KafkaFuture<ImmutablePair<Node, MetadataResponse>> response = requestClient.request(MetadataRequest.Builder.allTopics(), MetadataResponse.class, nodeProvider);
+            CompletableFuture<ImmutablePair<Node, MetadataResponse>> response = requestClient.request(MetadataRequest.Builder.allTopics(), nodeProvider, new FutureResponseHandler<>(MetadataResponse.class));
             System.out.println(response.get(10, TimeUnit.SECONDS).getLeft());
             System.out.println(response.get(10, TimeUnit.SECONDS).getRight().cluster());
         }
@@ -39,9 +37,9 @@ class ClusterTest {
 
         try(KafkaRequestClient requestClient = KafkaRequestClient.create(properties);
             ClusterMetadata clusterMetadata = BootstrappedClusterMetadata.create(requestClient, properties)) {
-            Supplier<Node> nodeProvider = new RandomNodeProvider(clusterMetadata);
+            NodeProvider nodeProvider = new RandomNodeProvider(clusterMetadata);
 
-            KafkaFuture<ImmutablePair<Node, MetadataResponse>> response = requestClient.request(MetadataRequest.Builder.allTopics(), MetadataResponse.class, nodeProvider);
+            CompletableFuture<ImmutablePair<Node, MetadataResponse>> response = requestClient.request(MetadataRequest.Builder.allTopics(), nodeProvider, new FutureResponseHandler<>(MetadataResponse.class));
             System.out.println(response.get(10, TimeUnit.SECONDS).getLeft());
             System.out.println(response.get(10, TimeUnit.SECONDS).getRight().cluster());
         }

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.Supplier;
 
-public class RandomNodeProvider implements Supplier<Node> {
+public class RandomNodeProvider implements NodeProvider {
 
     private final ClusterMetadata clusterMetadata;
 
@@ -22,7 +22,7 @@ public class RandomNodeProvider implements Supplier<Node> {
     }
 
     @Override
-    public Node get() {
+    public Node provide() {
         if (clusterMetadata.isReady() && !clusterMetadata.nodes().isEmpty()) {
             List<Node> nodes = this.clusterMetadata.nodes();
             int index = this.randIndex.nextInt(nodes.size());

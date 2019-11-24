@@ -2,9 +2,7 @@ package net.uweeisele.kafka.protocol.client.node;
 
 import org.apache.kafka.common.Node;
 
-import java.util.function.Supplier;
-
-public class ConstantNodeProvider implements Supplier<Node> {
+public class ConstantNodeProvider implements NodeProvider {
 
     private final ClusterMetadata clusterMetadata;
 
@@ -16,7 +14,7 @@ public class ConstantNodeProvider implements Supplier<Node> {
     }
 
     @Override
-    public Node get() {
+    public Node provide() {
         if (clusterMetadata.isReady() && clusterMetadata.nodeById(nodeId) != null) {
             return clusterMetadata.nodeById(nodeId);
         }

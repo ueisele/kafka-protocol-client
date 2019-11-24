@@ -101,12 +101,12 @@ public class BootstrappedClusterMetadata implements ClusterMetadata {
     }
 
     public BootstrappedClusterMetadata(KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, BootstrapClusterBuilder bootstrapClusterBuilder, ScheduledExecutorService scheduledExecutorService, LogContext logContext, Time time) {
+        this.log = logContext.logger(BootstrappedClusterMetadata.class);
+        this.time = time;
         this.client = client;
         this.updateBackoffMs = updateBackoffMs;
         this.updateIntervalMs = updateIntervalMs;
         update(bootstrapClusterBuilder.get(), time.milliseconds());
-        this.log = logContext.logger(BootstrappedClusterMetadata.class);
-        this.time = time;
         this.log.debug("Bootstrapped cluster metadata initialized");
         this.updateTask = scheduledExecutorService.scheduleWithFixedDelay(this::runUpdateCycle, updateBackoffMs, updateBackoffMs, TimeUnit.MILLISECONDS);
 
@@ -262,4 +262,5 @@ public class BootstrappedClusterMetadata implements ClusterMetadata {
             this.cluster = cluster;
         }
     }
+
 }
