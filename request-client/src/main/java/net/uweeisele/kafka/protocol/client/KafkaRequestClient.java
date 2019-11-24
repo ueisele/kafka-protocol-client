@@ -269,7 +269,6 @@ public class KafkaRequestClient implements AutoCloseable {
                 new TimeoutProcessorFactory() : timeoutProcessorFactory;
         this.maxRetries = config.getInt(RequestClientConfig.RETRIES_CONFIG);
         this.retryBackoffMs = config.getLong(RequestClientConfig.RETRY_BACKOFF_MS_CONFIG);
-        config.logUnused();
         AppInfoParser.registerAppInfo(JMX_PREFIX, clientId, metrics, time.milliseconds());
         log.debug("Kafka request client initialized");
         thread.start();

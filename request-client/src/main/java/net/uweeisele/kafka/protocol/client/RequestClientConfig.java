@@ -57,9 +57,6 @@ public class RequestClientConfig extends AbstractConfig {
     public static final String CLIENT_ID_CONFIG = CommonClientConfigs.CLIENT_ID_CONFIG;
     private static final String CLIENT_ID_DOC = CommonClientConfigs.CLIENT_ID_DOC;
 
-    public static final String METADATA_MAX_AGE_CONFIG = CommonClientConfigs.METADATA_MAX_AGE_CONFIG;
-    private static final String METADATA_MAX_AGE_DOC = CommonClientConfigs.METADATA_MAX_AGE_DOC;
-
     public static final String SEND_BUFFER_CONFIG = CommonClientConfigs.SEND_BUFFER_CONFIG;
     private static final String SEND_BUFFER_DOC = CommonClientConfigs.SEND_BUFFER_DOC;
 
@@ -87,7 +84,6 @@ public class RequestClientConfig extends AbstractConfig {
     static {
         CONFIG = new ConfigDef()
                 .define(CLIENT_ID_CONFIG, Type.STRING, "", Importance.MEDIUM, CLIENT_ID_DOC)
-                .define(METADATA_MAX_AGE_CONFIG, Type.LONG, 5 * 60 * 1000, atLeast(0), Importance.LOW, METADATA_MAX_AGE_DOC)
                 .define(SEND_BUFFER_CONFIG, Type.INT, 128 * 1024, atLeast(-1), Importance.MEDIUM, SEND_BUFFER_DOC)
                 .define(RECEIVE_BUFFER_CONFIG, Type.INT, 64 * 1024, atLeast(-1), Importance.MEDIUM, RECEIVE_BUFFER_DOC)
                 .define(RECONNECT_BACKOFF_MS_CONFIG,

@@ -3,6 +3,7 @@ package net.uweeisele.kafka.protocol.client.node;
 import net.uweeisele.kafka.protocol.client.KafkaRequestClient;
 import net.uweeisele.kafka.protocol.client.ResponseHandler;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.apache.kafka.clients.ClientDnsLookup;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -15,9 +16,11 @@ import org.apache.kafka.common.utils.Time;
 import org.slf4j.Logger;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.*;
 
-public class BootstrappedClusterMetadata implements ClusterMetadata, AutoCloseable {
+public class BootstrappedClusterMetadata implements ClusterMetadata {
 
     private final Logger log;
 
@@ -67,22 +70,54 @@ public class BootstrappedClusterMetadata implements ClusterMetadata, AutoCloseab
         UPDATE_PENDING
     }
 
-    public BootstrappedClusterMetadata(LogContext logContext, KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, BootstrapClusterBuilder bootstrapClusterBuilder) {
-        this(logContext.logger(BootstrappedClusterMetadata.class), client, updateBackoffMs, updateIntervalMs, Executors.newSingleThreadScheduledExecutor(daemonThreadFactory()), Time.SYSTEM, bootstrapClusterBuilder);
+    public static BootstrappedClusterMetadata create(KafkaRequestClient client, Properties properties) {
+        return createInternal(client, new BootstrappedClusterMetadataConfig(properties));
     }
 
-    BootstrappedClusterMetadata(Logger log, KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, ScheduledExecutorService scheduledExecutorService, Time time, BootstrapClusterBuilder bootstrapClusterBuilder) {
-        this.log = log;
+    public static BootstrappedClusterMetadata create(KafkaRequestClient client, Map<String, Object> conf) {
+        return createInternal(client, new BootstrappedClusterMetadataConfig(conf));
+    }
+
+    static BootstrappedClusterMetadata createInternal(KafkaRequestClient client, BootstrappedClusterMetadataConfig config) {
+        return new BootstrappedClusterMetadata(
+                client,
+                config.getLong(BootstrappedClusterMetadataConfig.RETRY_BACKOFF_MS_CONFIG),
+                config.getLong(BootstrappedClusterMetadataConfig.METADATA_MAX_AGE_CONFIG),
+                ClientDnsLookup.forConfig(config.getString(BootstrappedClusterMetadataConfig.CLIENT_DNS_LOOKUP_CONFIG)),
+                config.getList(BootstrappedClusterMetadataConfig.BOOTSTRAP_SERVERS_CONFIG)
+        );
+    }
+
+    public BootstrappedClusterMetadata(KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, ClientDnsLookup clientDnsLookup, List<String> bootstrapServers) {
+        this(client, updateBackoffMs, updateIntervalMs, new BootstrapClusterBuilder().addUrls(clientDnsLookup, bootstrapServers));
+    }
+
+    public BootstrappedClusterMetadata(KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, BootstrapClusterBuilder bootstrapClusterBuilder) {
+        this(client, updateBackoffMs, updateIntervalMs, bootstrapClusterBuilder, Executors.newSingleThreadScheduledExecutor(daemonThreadFactory()));
+    }
+
+    public BootstrappedClusterMetadata(KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, BootstrapClusterBuilder bootstrapClusterBuilder, ScheduledExecutorService scheduledExecutorService) {
+        this(client, updateBackoffMs, updateIntervalMs, bootstrapClusterBuilder, scheduledExecutorService, createLogContext(), Time.SYSTEM);
+    }
+
+    public BootstrappedClusterMetadata(KafkaRequestClient client, long updateBackoffMs, long updateIntervalMs, BootstrapClusterBuilder bootstrapClusterBuilder, ScheduledExecutorService scheduledExecutorService, LogContext logContext, Time time) {
         this.client = client;
         this.updateBackoffMs = updateBackoffMs;
         this.updateIntervalMs = updateIntervalMs;
-        this.updateTask = scheduledExecutorService.scheduleWithFixedDelay(this::runUpdateCycle, updateBackoffMs, updateBackoffMs, TimeUnit.MILLISECONDS);
+        update(bootstrapClusterBuilder.get(), time.milliseconds());
+        this.log = logContext.logger(BootstrappedClusterMetadata.class);
         this.time = time;
-        this.cluster = bootstrapClusterBuilder.get();
+        this.log.debug("Bootstrapped cluster metadata initialized");
+        this.updateTask = scheduledExecutorService.scheduleWithFixedDelay(this::runUpdateCycle, updateBackoffMs, updateBackoffMs, TimeUnit.MILLISECONDS);
+
     }
 
-    private static ThreadFactory daemonThreadFactory() {
+    static ThreadFactory daemonThreadFactory() {
         return new BasicThreadFactory.Builder().daemon(true).build();
+    }
+
+    static LogContext createLogContext() {
+        return new LogContext("[BootstrappedClusterMetadata] ");
     }
 
     @Override
@@ -136,6 +171,7 @@ public class BootstrappedClusterMetadata implements ClusterMetadata, AutoCloseab
 
     @Override
     public void close() {
+        log.debug("Closing update task.");
         updateTask.cancel(false);
     }
 

@@ -5,7 +5,7 @@ import org.apache.kafka.common.TopicPartition;
 
 import java.util.List;
 
-public interface ClusterMetadata {
+public interface ClusterMetadata extends AutoCloseable {
 
     Node controller();
 
@@ -18,4 +18,7 @@ public interface ClusterMetadata {
     boolean isReady();
 
     ClusterMetadata requestUpdate();
+
+    @Override
+    default void close() {};
 }
